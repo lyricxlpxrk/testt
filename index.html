@@ -1,0 +1,468 @@
+from pathlib import Path
+
+html = r'''<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>고2 영어 구문 분석 훈련</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Arial, "Noto Sans KR", sans-serif;
+    background: #f4f7fb;
+    color: #172033;
+  }
+  .app {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px 18px 50px;
+  }
+  header {
+    background: white;
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 8px 30px rgba(30,50,90,.08);
+    margin-bottom: 18px;
+  }
+  h1 { margin: 0 0 8px; font-size: 28px; }
+  .subtitle { color: #657087; margin: 0; }
+  .progress {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 18px;
+    color: #536078;
+    font-weight: 700;
+  }
+  .bar {
+    height: 9px;
+    background: #e7ebf3;
+    border-radius: 99px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .bar > div {
+    height: 100%;
+    width: 10%;
+    background: #4f7cff;
+    transition: width .3s;
+  }
+  .card {
+    background: white;
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 8px 30px rgba(30,50,90,.08);
+    margin-bottom: 18px;
+  }
+  .label {
+    font-size: 13px;
+    font-weight: 800;
+    color: #4f7cff;
+    margin-bottom: 8px;
+  }
+  .sentence {
+    font-size: 22px;
+    line-height: 1.65;
+    margin: 0;
+  }
+  .instruction {
+    color: #68748a;
+    margin: 10px 0 0;
+    font-size: 14px;
+  }
+  .word-bank {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 15px;
+    background: #f7f9fc;
+    border-radius: 14px;
+    margin-top: 18px;
+    min-height: 65px;
+  }
+  .token {
+    border: 1px solid #d5dbea;
+    background: white;
+    border-radius: 9px;
+    padding: 8px 11px;
+    cursor: grab;
+    user-select: none;
+    font-size: 16px;
+    box-shadow: 0 2px 5px rgba(0,0,0,.04);
+  }
+  .token:active { cursor: grabbing; }
+  .token.selected {
+    outline: 3px solid rgba(79,124,255,.2);
+  }
+  .zones {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-top: 18px;
+  }
+  .zone {
+    min-height: 135px;
+    border: 2px dashed #cbd3e2;
+    border-radius: 14px;
+    padding: 10px;
+    background: #fbfcfe;
+    transition: .15s;
+  }
+  .zone.dragover {
+    border-color: #4f7cff;
+    background: #eef3ff;
+    transform: translateY(-2px);
+  }
+  .zone h3 {
+    margin: 0 0 8px;
+    font-size: 15px;
+  }
+  .zone small { color: #7b8495; }
+  .zone .token {
+    display: inline-block;
+    margin: 4px 3px;
+  }
+  .zone.s h3 { color: #2463eb; }
+  .zone.v h3 { color: #d33c3c; }
+  .zone.o h3 { color: #198754; }
+  .zone.c h3 { color: #9b59b6; }
+  .zone.m h3 { color: #d88900; }
+  .actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+    flex-wrap: wrap;
+  }
+  button {
+    border: 0;
+    border-radius: 11px;
+    padding: 11px 18px;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .primary { background: #4f7cff; color: white; }
+  .secondary { background: #edf0f6; color: #344054; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .feedback {
+    margin-top: 18px;
+    padding: 16px;
+    border-radius: 14px;
+    display: none;
+    line-height: 1.7;
+  }
+  .feedback.show { display: block; }
+  .feedback.good { background: #eaf8ef; color: #176b37; }
+  .feedback.bad { background: #fff0f0; color: #9a2929; }
+  .answer {
+    margin-top: 8px;
+    padding: 12px;
+    background: rgba(255,255,255,.7);
+    border-radius: 10px;
+    font-size: 14px;
+  }
+  .score {
+    font-size: 18px;
+    font-weight: 900;
+  }
+  @media (max-width: 800px) {
+    .zones { grid-template-columns: 1fr 1fr; }
+    .sentence { font-size: 19px; }
+  }
+  @media (max-width: 500px) {
+    .zones { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>영어 구문 분석 훈련</h1>
+    <p class="subtitle">고등학교 2학년 · 문장 성분을 드래그해서 분류해 보세요.</p>
+    <div class="progress">
+      <span id="questionNo">문제 1 / 10</span>
+      <span id="scoreText">점수 0점</span>
+    </div>
+    <div class="bar"><div id="progressBar"></div></div>
+  </header>
+
+  <section class="card">
+    <div class="label">QUESTION</div>
+    <p id="sentence" class="sentence"></p>
+    <p class="instruction">아래 단어/구를 <b>주어(S), 동사(V), 목적어(O), 보어(C), 수식어(M)</b> 중 알맞은 곳으로 드래그하세요.</p>
+
+    <div id="wordBank" class="word-bank"></div>
+
+    <div class="zones">
+      <div class="zone s" data-type="S"><h3>주어 S</h3><small>누가 / 무엇이</small></div>
+      <div class="zone v" data-type="V"><h3>동사 V</h3><small>무엇을 하는가</small></div>
+      <div class="zone o" data-type="O"><h3>목적어 O</h3><small>동작의 대상</small></div>
+      <div class="zone c" data-type="C"><h3>보어 C</h3><small>주어·목적어 설명</small></div>
+      <div class="zone m" data-type="M"><h3>수식어 M</h3><small>시간·장소·방법·이유 등</small></div>
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="checkBtn">정답 확인</button>
+      <button class="secondary" id="resetBtn">처음부터 다시</button>
+      <button class="secondary" id="nextBtn" disabled>다음 문제 →</button>
+    </div>
+
+    <div id="feedback" class="feedback"></div>
+  </section>
+</div>
+
+<script>
+const questions = [
+  {
+    sentence: "Many students review their notes carefully before important exams.",
+    groups: [
+      ["Many students", "S"],
+      ["review", "V"],
+      ["their notes", "O"],
+      ["carefully", "M"],
+      ["before important exams", "M"]
+    ],
+    explanation: "Many students가 주어, review가 동사, their notes가 목적어입니다. carefully와 before important exams는 동작을 꾸며 주는 수식어입니다."
+  },
+  {
+    sentence: "The teacher gave the students useful advice about effective study habits.",
+    groups: [
+      ["The teacher", "S"],
+      ["gave", "V"],
+      ["the students", "O"],
+      ["useful advice", "O"],
+      ["about effective study habits", "M"]
+    ],
+    explanation: "gave는 4형식 동사로 the students가 간접목적어, useful advice가 직접목적어입니다. about effective study habits는 advice의 내용을 구체화합니다."
+  },
+  {
+    sentence: "Students who exercise regularly often feel more energetic during the school day.",
+    groups: [
+      ["Students who exercise regularly", "S"],
+      ["often", "M"],
+      ["feel", "V"],
+      ["more energetic", "C"],
+      ["during the school day", "M"]
+    ],
+    explanation: "Students who exercise regularly 전체가 주어입니다. feel 뒤의 more energetic은 주어 Students의 상태를 설명하므로 보어입니다."
+  },
+  {
+    sentence: "Learning a foreign language requires students to practice consistently.",
+    groups: [
+      ["Learning a foreign language", "S"],
+      ["requires", "V"],
+      ["students", "O"],
+      ["to practice consistently", "C"]
+    ],
+    explanation: "Learning a foreign language는 동명사구 주어입니다. require + 목적어 + to부정사 구조에서 students가 목적어, to practice consistently가 목적격보어 역할을 합니다."
+  },
+  {
+    sentence: "The book that you recommended helped me understand the difficult concept.",
+    groups: [
+      ["The book that you recommended", "S"],
+      ["helped", "V"],
+      ["me", "O"],
+      ["understand the difficult concept", "C"]
+    ],
+    explanation: "The book that you recommended 전체가 주어입니다. helped me understand ~는 help + 목적어 + 동사원형 구조입니다."
+  },
+  {
+    sentence: "Although the experiment seemed successful at first, the researchers discovered several problems.",
+    groups: [
+      ["Although the experiment seemed successful at first", "M"],
+      ["the researchers", "S"],
+      ["discovered", "V"],
+      ["several problems", "O"]
+    ],
+    explanation: "Although로 시작하는 절 전체가 주절을 꾸미는 양보의 부사절이므로 수식어입니다. 주절의 핵심은 the researchers / discovered / several problems입니다."
+  },
+  {
+    sentence: "The students studying in the library usually finish their assignments before dinner.",
+    groups: [
+      ["The students studying in the library", "S"],
+      ["usually", "M"],
+      ["finish", "V"],
+      ["their assignments", "O"],
+      ["before dinner", "M"]
+    ],
+    explanation: "studying in the library는 students를 수식하는 현재분사구입니다. 따라서 The students studying in the library 전체가 주어입니다."
+  },
+  {
+    sentence: "Scientists have found that regular sleep improves students' ability to concentrate.",
+    groups: [
+      ["Scientists", "S"],
+      ["have found", "V"],
+      ["that regular sleep improves students' ability to concentrate", "O"]
+    ],
+    explanation: "that regular sleep improves students' ability to concentrate 전체가 have found의 목적어 역할을 하는 명사절입니다."
+  },
+  {
+    sentence: "When students organize their ideas clearly, they can write more effective essays.",
+    groups: [
+      ["When students organize their ideas clearly", "M"],
+      ["they", "S"],
+      ["can write", "V"],
+      ["more effective essays", "O"]
+    ],
+    explanation: "When으로 시작하는 시간의 부사절 전체가 수식어입니다. 주절은 they / can write / more effective essays 구조입니다."
+  },
+  {
+    sentence: "The new technology has made online classes more convenient for many students.",
+    groups: [
+      ["The new technology", "S"],
+      ["has made", "V"],
+      ["online classes", "O"],
+      ["more convenient", "C"],
+      ["for many students", "M"]
+    ],
+    explanation: "make + 목적어 + 목적격보어 구조입니다. online classes가 목적어이고 more convenient가 목적격보어입니다."
+  }
+];
+
+let current = 0;
+let score = 0;
+let checked = false;
+
+const sentenceEl = document.getElementById("sentence");
+const wordBank = document.getElementById("wordBank");
+const feedback = document.getElementById("feedback");
+const checkBtn = document.getElementById("checkBtn");
+const nextBtn = document.getElementById("nextBtn");
+const resetBtn = document.getElementById("resetBtn");
+
+function shuffle(arr) {
+  return [...arr].sort(() => Math.random() - 0.5);
+}
+
+function loadQuestion() {
+  checked = false;
+  const q = questions[current];
+  sentenceEl.textContent = q.sentence;
+  wordBank.innerHTML = "";
+  document.querySelectorAll(".zone").forEach(z => {
+    z.querySelectorAll(".token").forEach(t => t.remove());
+  });
+
+  shuffle(q.groups).forEach(([text, type], index) => {
+    const token = document.createElement("div");
+    token.className = "token";
+    token.textContent = text;
+    token.draggable = true;
+    token.dataset.answer = type;
+    token.dataset.id = index;
+    token.addEventListener("dragstart", e => {
+      e.dataTransfer.setData("text/plain", token.dataset.id);
+    });
+    wordBank.appendChild(token);
+  });
+
+  feedback.className = "feedback";
+  feedback.innerHTML = "";
+  checkBtn.disabled = false;
+  nextBtn.disabled = true;
+  updateHeader();
+}
+
+document.querySelectorAll(".zone").forEach(zone => {
+  zone.addEventListener("dragover", e => {
+    e.preventDefault();
+    zone.classList.add("dragover");
+  });
+  zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
+  zone.addEventListener("drop", e => {
+    e.preventDefault();
+    zone.classList.remove("dragover");
+    const id = e.dataTransfer.getData("text/plain");
+    const token = document.querySelector(`.token[data-id="${id}"]`);
+    if (token && !checked) zone.appendChild(token);
+  });
+});
+
+wordBank.addEventListener("dragover", e => e.preventDefault());
+wordBank.addEventListener("drop", e => {
+  e.preventDefault();
+  if (checked) return;
+  const id = e.dataTransfer.getData("text/plain");
+  const token = document.querySelector(`.token[data-id="${id}"]`);
+  if (token) wordBank.appendChild(token);
+});
+
+function checkAnswer() {
+  if (checked) return;
+
+  const q = questions[current];
+  let correct = true;
+  let placed = 0;
+
+  document.querySelectorAll(".zone").forEach(zone => {
+    zone.querySelectorAll(".token").forEach(token => {
+      placed++;
+      if (token.dataset.answer !== zone.dataset.type) correct = false;
+    });
+  });
+
+  if (placed !== q.groups.length) correct = false;
+
+  checked = true;
+  if (correct) {
+    score++;
+    feedback.className = "feedback show good";
+    feedback.innerHTML =
+      `<div class="score">🎉 정답입니다!</div>
+       <div class="answer">${q.explanation}</div>`;
+  } else {
+    const answers = q.groups.map(([text, type]) => `<b>${type}</b>: ${text}`).join("<br>");
+    feedback.className = "feedback show bad";
+    feedback.innerHTML =
+      `<div class="score">다시 확인해 보세요.</div>
+       <div class="answer">${q.explanation}<br><br><b>정답 구조</b><br>${answers}</div>`;
+  }
+
+  checkBtn.disabled = true;
+  nextBtn.disabled = false;
+  updateHeader();
+}
+
+function nextQuestion() {
+  if (current < questions.length - 1) {
+    current++;
+    loadQuestion();
+  } else {
+    sentenceEl.innerHTML = "모든 문제를 완료했습니다! 🎉";
+    wordBank.innerHTML = "";
+    document.querySelectorAll(".zone").forEach(z => z.querySelectorAll(".token").forEach(t => t.remove()));
+    feedback.className = "feedback show good";
+    feedback.innerHTML = `<div class="score">최종 점수: ${score} / ${questions.length}</div>
+      <div class="answer">다시 도전하려면 <b>처음부터 다시</b> 버튼을 눌러 주세요.</div>`;
+    checkBtn.disabled = true;
+    nextBtn.disabled = true;
+    document.getElementById("questionNo").textContent = "학습 완료";
+    document.getElementById("progressBar").style.width = "100%";
+  }
+}
+
+function updateHeader() {
+  document.getElementById("questionNo").textContent = `문제 ${current + 1} / ${questions.length}`;
+  document.getElementById("scoreText").textContent = `점수 ${score}점`;
+  document.getElementById("progressBar").style.width = `${((current + 1) / questions.length) * 100}%`;
+}
+
+checkBtn.addEventListener("click", checkAnswer);
+nextBtn.addEventListener("click", nextQuestion);
+resetBtn.addEventListener("click", () => {
+  current = 0;
+  score = 0;
+  loadQuestion();
+});
+
+loadQuestion();
+</script>
+</body>
+</html>
+'''
+
+path = Path("/mnt/data/index.html")
+path.write_text(html, encoding="utf-8")
+print(path)
